@@ -1,0 +1,14 @@
+[package]
+name = "rustic-tui"
+version = "0.1.0"
+edition = "2021"
+description = "A vim-like TUI live-coding environment for Rustic"
+
+[[bin]]
+name = "rustic-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+unicode-width = "0.2"
