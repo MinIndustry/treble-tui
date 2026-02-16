@@ -1,26 +1,24 @@
 use crate::panels::{EvalEntry, EvalEntryKind};
+use rustic_lang::session::{Delta, Session};
 
-/// Stub evaluation engine.
+/// Evaluation engine backed by rustic-lang's Session.
 ///
-/// In the future, this will connect to the Rustic audio backend
-/// and the rustic-lang compiler. For now, it provides a mock
-/// read-eval-execute loop that validates syntax superficially.
+/// Wraps the rustic-lang [`Session`] and converts its output into
+/// display entries for the TUI eval output panel.
 pub struct EvalEngine {
-    /// Eval counter for timestamps
+    session: Session,
     eval_count: u32,
 }
 
 impl EvalEngine {
     pub fn new() -> Self {
-        Self { eval_count: 0 }
+        Self {
+            session: Session::new(),
+            eval_count: 0,
+        }
     }
 
-    /// Evaluate the given source code and return output entries.
-    ///
-    /// Currently a stub that does basic validation:
-    /// - Checks for balanced braces/brackets/parens
-    /// - Reports line count and char count
-    /// - Returns mock compilation feedback
+    /// Evaluate the given source code and return display entries.
     pub fn evaluate(&mut self, source: &str) -> Vec<EvalEntry> {
         self.eval_count += 1;
         let timestamp = format!("#{:04}", self.eval_count);
@@ -28,125 +26,87 @@ impl EvalEngine {
 
         if source.trim().is_empty() {
             entries.push(EvalEntry {
-                timestamp: timestamp.clone(),
+                timestamp,
                 kind: EvalEntryKind::Warning,
                 message: "Empty source buffer — nothing to evaluate.".to_string(),
             });
             return entries;
         }
 
-        // Basic metrics
-        let line_count = source.lines().count();
-        let char_count = source.len();
-        entries.push(EvalEntry {
-            timestamp: timestamp.clone(),
-            kind: EvalEntryKind::Info,
-            message: format!("Evaluating: {} lines, {} bytes", line_count, char_count),
-        });
+        let result = self.session.evaluate(source);
 
-        // Check balanced delimiters
-        match check_balanced(source) {
-            Ok(()) => {}
-            Err(err) => {
-                entries.push(EvalEntry {
-                    timestamp: timestamp.clone(),
-                    kind: EvalEntryKind::Error,
-                    message: err,
-                });
-                return entries;
-            }
-        }
-
-        // TODO: wire into rustic-lang compiler
-        // let ast = rustic_lang::parse(source);
-        // let score = rustic_lang::compile(ast);
-        // send score to audio backend
-
-        entries.push(EvalEntry {
-            timestamp: timestamp.clone(),
-            kind: EvalEntryKind::Success,
-            message: "Parse OK (stub) — no audio backend connected.".to_string(),
-        });
-
-        // Report any score/instrument keywords found (preview of future functionality)
-        let keywords_found: Vec<&str> = ["score", "staff", "instrument", "measure", "note", "bpm"]
-            .iter()
-            .filter(|kw| source.contains(**kw))
-            .copied()
-            .collect();
-
-        if !keywords_found.is_empty() {
+        // Report parse errors
+        for err in &result.errors {
             entries.push(EvalEntry {
-                timestamp,
-                kind: EvalEntryKind::Info,
-                message: format!("Keywords detected: {}", keywords_found.join(", ")),
+                timestamp: timestamp.clone(),
+                kind: EvalEntryKind::Error,
+                message: format!("Line {}: {}", err.location.line, err.message),
             });
         }
 
+        // Report deltas
+        for delta in &result.deltas {
+            let (action, name) = match delta {
+                Delta::Add(n) => ("Added", n.as_str()),
+                Delta::Modify(n) => ("Modified", n.as_str()),
+                Delta::Remove(n) => ("Removed", n.as_str()),
+                Delta::Mute(n) => ("Muted", n.as_str()),
+                Delta::Unmute(n) => ("Unmuted", n.as_str()),
+            };
+            entries.push(EvalEntry {
+                timestamp: timestamp.clone(),
+                kind: EvalEntryKind::Info,
+                message: format!("{} pattern: {}", action, name),
+            });
+        }
+
+        // Summary
+        if result.errors.is_empty() {
+            entries.push(EvalEntry {
+                timestamp: timestamp.clone(),
+                kind: EvalEntryKind::Success,
+                message: format!(
+                    "OK — {} active, {} muted ({} changes queued)",
+                    result.patterns_active,
+                    result.patterns_muted,
+                    result.deltas.len(),
+                ),
+            });
+        } else {
+            entries.push(EvalEntry {
+                timestamp: timestamp.clone(),
+                kind: EvalEntryKind::Warning,
+                message: format!(
+                    "{} error(s) — {} active, {} muted",
+                    result.errors.len(),
+                    result.patterns_active,
+                    result.patterns_muted,
+                ),
+            });
+        }
+
+        // Report session state
+        entries.push(EvalEntry {
+            timestamp,
+            kind: EvalEntryKind::Info,
+            message: format!(
+                "Session: bpm={}, sig={}/{}",
+                self.session.bpm, self.session.sig.0, self.session.sig.1
+            ),
+        });
+
         entries
     }
-}
 
-/// Check that braces, brackets, and parens are balanced.
-fn check_balanced(source: &str) -> Result<(), String> {
-    let mut stack: Vec<(char, usize, usize)> = Vec::new(); // (char, line, col)
-    for (line_idx, line) in source.lines().enumerate() {
-        for (col_idx, ch) in line.chars().enumerate() {
-            match ch {
-                '(' | '[' | '{' => stack.push((ch, line_idx + 1, col_idx + 1)),
-                ')' | ']' | '}' => {
-                    let expected = match ch {
-                        ')' => '(',
-                        ']' => '[',
-                        '}' => '{',
-                        _ => unreachable!(),
-                    };
-                    match stack.pop() {
-                        Some((open, _, _)) if open == expected => {}
-                        Some((open, l, c)) => {
-                            return Err(format!(
-                                "Mismatched delimiter: '{}' at {}:{} closed by '{}' at {}:{}",
-                                open,
-                                l,
-                                c,
-                                ch,
-                                line_idx + 1,
-                                col_idx + 1
-                            ));
-                        }
-                        None => {
-                            return Err(format!(
-                                "Unexpected closing '{}' at {}:{}",
-                                ch,
-                                line_idx + 1,
-                                col_idx + 1
-                            ));
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+    /// Get the current session (for context panel).
+    pub fn session(&self) -> &Session {
+        &self.session
     }
-    if let Some((ch, l, c)) = stack.last() {
-        return Err(format!("Unclosed '{}' at {}:{}", ch, l, c));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_balanced_ok() {
-        assert!(check_balanced("fn main() { let x = [1, 2]; }").is_ok());
-    }
-
-    #[test]
-    fn test_balanced_mismatch() {
-        assert!(check_balanced("fn main() { let x = [1, 2); }").is_err());
-    }
 
     #[test]
     fn test_eval_empty() {
@@ -157,9 +117,32 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_valid() {
+    fn test_eval_valid_pattern() {
         let mut engine = EvalEngine::new();
-        let entries = engine.evaluate("score { staff { note C4 } }");
+        let entries = engine.evaluate("kick kick \"x ~ x ~\"");
         assert!(entries.iter().any(|e| e.kind == EvalEntryKind::Success));
+        assert!(entries.iter().any(|e| e.message.contains("Added")));
+    }
+
+    #[test]
+    fn test_eval_with_error() {
+        let mut engine = EvalEngine::new();
+        let entries = engine.evaluate("this is broken ???");
+        assert!(entries.iter().any(|e| e.kind == EvalEntryKind::Error));
+    }
+
+    #[test]
+    fn test_eval_detects_changes() {
+        let mut engine = EvalEngine::new();
+        engine.evaluate("kick kick \"x ~ x ~\"");
+        let entries = engine.evaluate("kick kick \"x x x x\"");
+        assert!(entries.iter().any(|e| e.message.contains("Modified")));
+    }
+
+    #[test]
+    fn test_eval_reports_bpm() {
+        let mut engine = EvalEngine::new();
+        let entries = engine.evaluate("bpm 140\nkick kick \"x ~ x ~\"");
+        assert!(entries.iter().any(|e| e.message.contains("bpm=140")));
     }
 }

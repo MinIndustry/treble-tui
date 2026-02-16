@@ -68,31 +68,18 @@ struct App {
 impl App {
     fn new() -> Self {
         let sample_code = "\
-// RusticScore live coding environment
-// Write your score below, then save (:w or Ctrl+S) to evaluate.
+-- Rustic Live — edit and save (:w / Ctrl+S) to evaluate
+bpm 128
+sig 4/4
 
-score \"LiveSession\" {
-    bpm 120
+kick  kick   \"x ~ x ~\"
+snare snare  \"~ x ~ x\"
+hats  hihat  \"x*8\"
 
-    staff keyboard {
-        instrument piano {
-            voices 8
-            envelope adsr(0.01, 0.1, 0.7, 0.3)
-        }
+bass  saw    \"c2 _ eb2 _ g1 _ f2 _\"
+lead  piano  \"c4 eb4 g4 bb4\" | slow 2
 
-        measure {
-            note C4 quarter,
-            note E4 quarter,
-            note G4 quarter,
-            note C5 quarter,
-        }
-
-        measure {
-            note B3 half,
-            note D4 half,
-        }
-    }
-}
+; pad  pad   \"[c3,eb3,g3] ~ [f3,ab3,c4] ~\"
 ";
         let mut app = Self {
             code_buffer: Buffer::from_text("score.rt", sample_code),
