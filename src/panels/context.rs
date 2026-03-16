@@ -70,14 +70,12 @@ impl Widget for ContextPanel<'_> {
         let mut lines: Vec<Line> = Vec::new();
 
         // Engine status
-        lines.push(Line::from(vec![
-            Span::styled(
-                "Engine Status",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Engine Status",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]));
         lines.push(Line::from(vec![Span::styled(
             format!("  {}", self.info.engine_status),
             Style::default().fg(Color::White),
@@ -85,14 +83,12 @@ impl Widget for ContextPanel<'_> {
         lines.push(Line::from(""));
 
         // Instruments section
-        lines.push(Line::from(vec![
-            Span::styled(
-                "Instruments",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Instruments",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]));
 
         if self.info.instruments.is_empty() {
             lines.push(Line::from(vec![Span::styled(
@@ -112,10 +108,7 @@ impl Widget for ContextPanel<'_> {
                         format!("  {} ", indicator),
                         Style::default().fg(status_color),
                     ),
-                    Span::styled(
-                        inst.name.clone(),
-                        Style::default().fg(Color::White),
-                    ),
+                    Span::styled(inst.name.clone(), Style::default().fg(Color::White)),
                     Span::styled(
                         format!(" ({} voices)", inst.voice_count),
                         Style::default().fg(Color::DarkGray),
@@ -126,14 +119,12 @@ impl Widget for ContextPanel<'_> {
         lines.push(Line::from(""));
 
         // Keybinding hints
-        lines.push(Line::from(vec![
-            Span::styled(
-                "Keybindings",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Keybindings",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]));
 
         for (key, desc) in &self.info.keybindings {
             lines.push(Line::from(vec![
@@ -143,10 +134,7 @@ impl Widget for ContextPanel<'_> {
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!("  {}", desc),
-                    Style::default().fg(Color::White),
-                ),
+                Span::styled(format!("  {}", desc), Style::default().fg(Color::White)),
             ]));
         }
 

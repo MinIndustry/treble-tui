@@ -123,8 +123,8 @@ lead  piano  \"c4 eb4 g4 bb4\" | slow 2
     }
 
     fn execute_command(&mut self, cmd: &str) {
-        let parts: Vec<&str> = cmd.trim().split_whitespace().collect();
-        match parts.first().map(|s| *s) {
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        match parts.first().copied() {
             Some("w") | Some("write") => {
                 self.evaluate_buffer();
             }
@@ -327,13 +327,21 @@ lead  piano  \"c4 eb4 g4 bb4\" | slow 2
         // Column resizing with Ctrl+Right / Ctrl+Left
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             match key.code {
-                KeyCode::Right | KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) => {
+                KeyCode::Right | KeyCode::Char('l')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
                     self.columns.grow_focused();
                     let r = self.columns.ratios();
                     self.set_status(format!("Layout: {}-{}-{}", r[0], r[1], r[2]));
                     return;
                 }
-                KeyCode::Left | KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) => {
+                KeyCode::Left | KeyCode::Char('h')
+                    if key
+                        .modifiers
+                        .contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) =>
+                {
                     self.columns.shrink_focused();
                     let r = self.columns.ratios();
                     self.set_status(format!("Layout: {}-{}-{}", r[0], r[1], r[2]));
@@ -644,9 +652,9 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),     // columns
-                Constraint::Length(1),  // status bar
-                Constraint::Length(1),  // command / mode line
+                Constraint::Min(3),    // columns
+                Constraint::Length(1), // status bar
+                Constraint::Length(1), // command / mode line
             ])
             .split(size);
 
@@ -656,9 +664,7 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
 
         // --- Three-column layout ---
         let col_rects = app.columns.split(columns_area);
-        let viewport_height = col_rects[0]
-            .height
-            .saturating_sub(2) as usize; // subtract borders
+        let viewport_height = col_rects[0].height.saturating_sub(2) as usize; // subtract borders
 
         // Ensure cursor is visible
         app.code_buffer.ensure_cursor_visible(viewport_height);
@@ -680,8 +686,7 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
         frame.render_widget(output_panel, col_rects[1]);
 
         // Column 3: Context / reference
-        let context_panel =
-            ContextPanel::new(&app.context, app.columns.focused_index() == 2);
+        let context_panel = ContextPanel::new(&app.context, app.columns.focused_index() == 2);
         frame.render_widget(context_panel, col_rects[2]);
 
         // --- Status bar ---
@@ -733,8 +738,8 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
             ),
         ]);
 
-        let status_bar = Paragraph::new(status_line)
-            .style(Style::default().bg(Color::Rgb(30, 30, 30)));
+        let status_bar =
+            Paragraph::new(status_line).style(Style::default().bg(Color::Rgb(30, 30, 30)));
         frame.render_widget(status_bar, status_area);
 
         // --- Command / mode line ---

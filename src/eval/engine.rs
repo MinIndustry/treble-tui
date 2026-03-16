@@ -105,7 +105,7 @@ impl EvalEngine {
     }
 
     /// Get the current session (for context panel).
-    pub fn session(&self) -> &Session {
+    pub fn _session(&self) -> &Session {
         &self.session
     }
 }

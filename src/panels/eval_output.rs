@@ -91,11 +91,7 @@ impl Widget for EvalOutputPanel<'_> {
         }
 
         let viewport_height = inner.height as usize;
-        let visible_entries = self
-            .entries
-            .iter()
-            .skip(self.scroll)
-            .take(viewport_height);
+        let visible_entries = self.entries.iter().skip(self.scroll).take(viewport_height);
 
         let lines: Vec<Line> = visible_entries
             .map(|entry| {

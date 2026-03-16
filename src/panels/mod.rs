@@ -1,7 +1,7 @@
 mod code_editor;
-mod eval_output;
 mod context;
+mod eval_output;
 
 pub use code_editor::CodeEditorPanel;
-pub use eval_output::{EvalOutputPanel, EvalEntry, EvalEntryKind};
-pub use context::{ContextPanel, ContextInfo, InstrumentInfo};
+pub use context::{ContextInfo, ContextPanel, InstrumentInfo};
+pub use eval_output::{EvalEntry, EvalEntryKind, EvalOutputPanel};

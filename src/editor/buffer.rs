@@ -70,7 +70,7 @@ impl Buffer {
         self.current_line().len()
     }
 
-    pub fn lines(&self) -> &[String] {
+    pub fn _lines(&self) -> &[String] {
         &self.lines
     }
 
@@ -109,10 +109,7 @@ impl Buffer {
 
     pub fn move_to_first_non_blank(&mut self) {
         let line = self.current_line();
-        self.cursor_col = line
-            .chars()
-            .position(|c| !c.is_whitespace())
-            .unwrap_or(0);
+        self.cursor_col = line.chars().position(|c| !c.is_whitespace()).unwrap_or(0);
     }
 
     pub fn move_to_top(&mut self) {

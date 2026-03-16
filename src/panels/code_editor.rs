@@ -34,7 +34,11 @@ impl Widget for CodeEditorPanel<'_> {
             Style::default().fg(Color::DarkGray)
         };
 
-        let title = format!(" {} {} ", self.buffer.name, if self.buffer.dirty { "[+]" } else { "" });
+        let title = format!(
+            " {} {} ",
+            self.buffer.name,
+            if self.buffer.dirty { "[+]" } else { "" }
+        );
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(border_style)
@@ -58,12 +62,10 @@ impl Widget for CodeEditorPanel<'_> {
             let line_idx = self.buffer.scroll_y + vy;
             if line_idx >= self.buffer.line_count() {
                 // Tilde for empty lines (like vim)
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("{:>width$} ", "~", width = line_num_width),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("{:>width$} ", "~", width = line_num_width),
+                    Style::default().fg(Color::DarkGray),
+                )]));
                 continue;
             }
 
@@ -89,12 +91,8 @@ impl Widget for CodeEditorPanel<'_> {
             let line_num_str = format!("{:>width$} ", line_idx + 1, width = line_num_width);
 
             // Build spans for the line content, handling cursor and visual selection
-            let content_spans = self.build_line_spans(
-                &display_text,
-                line_idx,
-                visual_range,
-                text_width,
-            );
+            let content_spans =
+                self.build_line_spans(&display_text, line_idx, visual_range, text_width);
 
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             spans.extend(content_spans);
@@ -151,23 +149,15 @@ impl CodeEditorPanel<'_> {
         let mut spans = Vec::new();
         let mut i = 0;
         while i < chars.len() {
-            let in_visual = vis_range
-                .map(|(s, e)| i >= s && i < e)
-                .unwrap_or(false);
+            let in_visual = vis_range.map(|(s, e)| i >= s && i < e).unwrap_or(false);
             let is_cursor = cursor_col.map(|c| i == c).unwrap_or(false);
 
             let style = if is_cursor && *self.mode != Mode::Insert {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::White)
+                Style::default().fg(Color::Black).bg(Color::White)
             } else if is_cursor && *self.mode == Mode::Insert {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Green)
+                Style::default().fg(Color::Black).bg(Color::Green)
             } else if in_visual {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Blue)
+                Style::default().fg(Color::Black).bg(Color::Blue)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -175,9 +165,7 @@ impl CodeEditorPanel<'_> {
             // Batch consecutive characters with the same style
             let mut j = i + 1;
             while j < chars.len() {
-                let next_in_visual = vis_range
-                    .map(|(s, e)| j >= s && j < e)
-                    .unwrap_or(false);
+                let next_in_visual = vis_range.map(|(s, e)| j >= s && j < e).unwrap_or(false);
                 let next_is_cursor = cursor_col.map(|c| j == c).unwrap_or(false);
                 // A cursor position always breaks the batch
                 if next_is_cursor || (is_cursor && j == i + 1) {
