@@ -10,6 +10,12 @@ pub struct EvalEngine {
     eval_count: u32,
 }
 
+impl Default for EvalEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EvalEngine {
     pub fn new() -> Self {
         Self {

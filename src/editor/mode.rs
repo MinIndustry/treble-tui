@@ -40,6 +40,12 @@ pub struct CommandLine {
     pub cursor: usize,
 }
 
+impl Default for CommandLine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandLine {
     pub fn new() -> Self {
         Self {

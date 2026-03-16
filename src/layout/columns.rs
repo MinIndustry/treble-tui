@@ -15,6 +15,12 @@ pub struct ColumnLayout {
     resize_step: u16,
 }
 
+impl Default for ColumnLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColumnLayout {
     pub fn new() -> Self {
         Self {
