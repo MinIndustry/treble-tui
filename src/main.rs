@@ -789,10 +789,10 @@ fn main() -> io::Result<()> {
         }
 
         // Poll for events with timeout
-        if event::poll(tick_rate)? {
-            if let Event::Key(key) = event::read()? {
-                app.handle_key(key);
-            }
+        if event::poll(tick_rate)?
+            && let Event::Key(key) = event::read()?
+        {
+            app.handle_key(key);
         }
     }
 
