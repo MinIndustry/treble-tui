@@ -2,9 +2,13 @@ mod editor;
 mod eval;
 mod layout;
 mod panels;
+mod sequencer;
 
 use std::io;
 use std::time::{Duration, Instant};
+
+use clap::Parser;
+use treble_tui::logging::{LogCli, LogConfig, emit_init_failure, init as init_logging};
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -25,11 +29,15 @@ use eval::EvalEngine;
 use layout::ColumnLayout;
 use panels::{
     CodeEditorPanel, ContextInfo, ContextPanel, EvalEntry, EvalEntryKind, EvalOutputPanel,
-    InstrumentInfo,
+    InstrumentInfo, SequencePatternView, SequenceVizPanel,
 };
+use treble_lang::ast::program::PatternDef;
+use sequencer::{InstrumentRegistry, Sequencer, SequenceView, build_snapshot};
 
-/// Target frame rate (ticks per second).
-const TPS: u64 = 30;
+/// Target UI render rate (frames per second).
+const RENDER_TPS: u64 = 30;
+/// Sequencer poll rate — decoupled from rendering for tighter timing.
+const SEQUENCER_TPS: u64 = 120;
 
 /// Application state.
 struct App {
@@ -63,24 +71,44 @@ struct App {
 
     /// Whether the application should quit.
     should_quit: bool,
+
+    /// The treble backend application.
+    treble_app: Option<treble::prelude::App>,
+
+    /// Instrument name registry for the audio graph.
+    instrument_registry: InstrumentRegistry,
+
+    /// Pattern sequencer driving audio playback.
+    sequencer: Sequencer,
+
+    /// Whether the audio engine has successfully started.
+    engine_running: bool,
+
+    /// Cached sequence visualizer state (rebuilt each frame).
+    sequence_view: Option<SequenceView>,
 }
 
 impl App {
     fn new() -> Self {
-        let sample_code = "\
--- Rustic Live — edit and save (:w / Ctrl+S) to evaluate
-bpm 128
-sig 4/4
+        let sample_code = include_str!("sample_code.rt");
 
-kick  kick   \"x ~ x ~\"
-snare snare  \"~ x ~ x\"
-hats  hihat  \"x*8\"
+        let treble_app = {
+            let mut app = treble::prelude::App::new();
+            if let Ok(erx) = app.start(treble::audio::EventFilter::default()) {
+                std::thread::spawn(move || {
+                    while let Ok(event) = erx.recv() {
+                        log::trace!(target: "treble_tui::backend", "backend event: {event:?}");
+                    }
+                });
+                Some(app)
+            } else {
+                log::error!(target: "treble_tui::backend", "failed to start treble audio engine");
+                None
+            }
+        };
 
-bass  saw    \"c2 _ eb2 _ g1 _ f2 _\"
-lead  piano  \"c4 eb4 g4 bb4\" | slow 2
+        let engine_running = treble_app.is_some();
 
-; pad  pad   \"[c3,eb3,g3] ~ [f3,ab3,c4] ~\"
-";
         let mut app = Self {
             code_buffer: Buffer::from_text("score.rt", sample_code),
             eval_entries: Vec::new(),
@@ -95,9 +123,25 @@ lead  piano  \"c4 eb4 g4 bb4\" | slow 2
             columns: ColumnLayout::new(),
             status_message: None,
             should_quit: false,
+            treble_app,
+            instrument_registry: InstrumentRegistry::default(),
+            sequencer: Sequencer::new(),
+            engine_running,
+            sequence_view: None,
         };
         app.update_context_keybindings();
         app
+    }
+
+    fn quit(&mut self) {
+        self.sequencer.stop();
+        if let Some(mut app) = self.treble_app.take() {
+            if let Err(e) = app.stop() {
+                log::error!(target: "treble_tui::backend", "failed to stop treble audio engine: {e:?}");
+            } else {
+                log::info!(target: "treble_tui::backend", "treble audio engine stopped");
+            }
+        }
     }
 
     fn set_status(&mut self, msg: impl Into<String>) {
@@ -116,9 +160,55 @@ lead  piano  \"c4 eb4 g4 bb4\" | slow 2
         }
         self.code_buffer.dirty = false;
         if success {
+            self.sync_sequencer_after_eval();
             self.set_status("Evaluation complete.");
         } else {
             self.set_status("Evaluation finished with errors.");
+        }
+        self.update_context_keybindings();
+    }
+
+    /// Register instruments and queue a playback snapshot after a successful eval.
+    fn sync_sequencer_after_eval(&mut self) {
+        let session = self.eval_engine.session();
+        let bpm = session.bpm;
+        let sig = session.sig;
+        let scale = session.scale;
+        let patterns: Vec<_> = session.active_patterns().into_iter().cloned().collect();
+        if patterns.is_empty() {
+            return;
+        }
+
+        let instrument_names: Vec<String> = patterns.iter().map(|p| p.instrument.clone()).collect();
+        let pattern_refs: Vec<&PatternDef> = patterns.iter().collect();
+
+        if let Some(app) = self.treble_app.as_mut() {
+            let added = self
+                .instrument_registry
+                .ensure(app, instrument_names.into_iter());
+            if added {
+                if let Err(e) = app.recompile() {
+                    log::error!(
+                        target: "treble_tui::sequencer",
+                        "failed to recompile audio graph: {e:?}"
+                    );
+                }
+            }
+        }
+
+        if let Some(snapshot) =
+            build_snapshot(bpm, sig, scale, pattern_refs, &self.instrument_registry)
+        {
+            self.sequencer.queue_snapshot(snapshot);
+        }
+    }
+
+    fn tick_sequencer(&mut self) {
+        let Some(app) = self.treble_app.as_ref() else {
+            return;
+        };
+        if self.sequencer.tick(Instant::now(), app) {
+            self.eval_engine.apply_pending();
         }
     }
 
@@ -213,19 +303,40 @@ lead  piano  \"c4 eb4 g4 bb4\" | slow 2
             ],
         };
         self.context.keybindings = bindings;
-        self.context.engine_status = "Idle (no audio backend)".to_string();
-        self.context.instruments = vec![
-            InstrumentInfo {
-                name: "piano".into(),
-                active: false,
-                voice_count: 8,
-            },
-            InstrumentInfo {
-                name: "drums".into(),
-                active: false,
-                voice_count: 4,
-            },
-        ];
+
+        let session = self.eval_engine.session();
+        if !self.engine_running {
+            self.context.engine_status = "No audio backend".to_string();
+        } else if self.sequencer.is_running() {
+            self.context.engine_status = format!(
+                "Playing — {} patterns @ {} bpm, {}/{}",
+                self.sequencer.active_pattern_count(),
+                session.bpm,
+                session.sig.0,
+                session.sig.1,
+            );
+        } else {
+            self.context.engine_status = "Engine ready — evaluate to start".to_string();
+        }
+
+        self.context.instruments = self
+            .instrument_registry
+            .registered_names()
+            .map(|name| InstrumentInfo {
+                name: name.clone(),
+                active: self
+                    .eval_engine
+                    .session()
+                    .active_patterns()
+                    .iter()
+                    .any(|p| p.instrument == *name),
+                voice_count: if InstrumentRegistry::is_percussion(name) {
+                    1
+                } else {
+                    8
+                },
+            })
+            .collect();
     }
 
     /// Handle a keyboard event based on the current mode.
@@ -677,13 +788,62 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
         );
         frame.render_widget(editor_panel, col_rects[0]);
 
-        // Column 2: Eval output
+        // Column 2: Eval output + sequence visualizer
+        let pattern_count = app
+            .sequence_view
+            .as_ref()
+            .map(|v| v.patterns.len())
+            .unwrap_or(1);
+        let viz_height = SequenceVizPanel::height_for_patterns(pattern_count.min(6));
+
+        let col2_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(viz_height)])
+            .split(col_rects[1]);
+
+        app.sequence_view = app.sequencer.sequence_view(std::time::Instant::now());
+
+        let pattern_views: Vec<SequencePatternView> = app
+            .sequence_view
+            .as_ref()
+            .map(|v| {
+                v.patterns
+                    .iter()
+                    .map(|p| SequencePatternView {
+                        pattern_name: p.pattern_name.clone(),
+                        instrument: p.instrument.clone(),
+                        phase: p.phase,
+                        current_step: p.current_step,
+                        steps: p
+                            .steps
+                            .iter()
+                            .map(|s| (s.label.clone(), s.start, s.end))
+                            .collect(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let output_panel = EvalOutputPanel::new(
             &app.eval_entries,
             app.eval_scroll,
             app.columns.focused_index() == 1,
         );
-        frame.render_widget(output_panel, col_rects[1]);
+        frame.render_widget(output_panel, col2_chunks[0]);
+
+        let (global_cycle, cycle_phase) = app
+            .sequence_view
+            .as_ref()
+            .map(|v| (v.global_cycle, v.cycle_phase))
+            .unwrap_or((0, 0.0));
+
+        let viz_panel = SequenceVizPanel::new(
+            &pattern_views,
+            global_cycle,
+            cycle_phase,
+            app.columns.focused_index() == 1,
+        );
+        frame.render_widget(viz_panel, col2_chunks[1]);
 
         // Column 3: Context / reference
         let context_panel = ContextPanel::new(&app.context, app.columns.focused_index() == 2);
@@ -758,6 +918,15 @@ fn render(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) 
 // --- Main entry point ---
 
 fn main() -> io::Result<()> {
+    let log_cli = LogCli::parse();
+    let log_config = LogConfig::from_cli(&log_cli);
+    let _log_guard = init_logging(&log_config).unwrap_or_else(|err| {
+        emit_init_failure(&err);
+        std::process::exit(1);
+    });
+
+    log::info!(target: "treble_tui", "starting application");
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -766,13 +935,16 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new();
-    let tick_rate = Duration::from_millis(1000 / TPS);
+    let render_interval = Duration::from_millis(1000 / RENDER_TPS);
+    let sequencer_interval = Duration::from_millis(1000 / SEQUENCER_TPS);
+    let mut last_render = Instant::now();
+    let mut last_sequencer = Instant::now();
 
     // Initial welcome message
     app.eval_entries.push(EvalEntry {
         timestamp: "#0000".to_string(),
         kind: EvalEntryKind::Info,
-        message: "Welcome to Rustic TUI — live coding environment.".to_string(),
+        message: "Welcome to Treble TUI — live coding environment.".to_string(),
     });
     app.eval_entries.push(EvalEntry {
         timestamp: "#0000".to_string(),
@@ -782,17 +954,35 @@ fn main() -> io::Result<()> {
 
     // Main event loop
     loop {
-        render(&mut app, &mut terminal)?;
+        let now = Instant::now();
 
-        if app.should_quit {
-            break;
+        if app.sequencer.is_running() && now.duration_since(last_sequencer) >= sequencer_interval {
+            last_sequencer = now;
+            app.tick_sequencer();
         }
 
-        // Poll for events with timeout
-        if event::poll(tick_rate)?
+        if now.duration_since(last_render) >= render_interval {
+            last_render = now;
+            render(&mut app, &mut terminal)?;
+
+            if app.should_quit {
+                app.quit();
+                break;
+            }
+        }
+
+        let until_sequencer = sequencer_interval.saturating_sub(now.duration_since(last_sequencer));
+        let until_render = render_interval.saturating_sub(now.duration_since(last_render));
+        let wait = until_sequencer.min(until_render).max(Duration::from_millis(1));
+
+        if event::poll(wait)?
             && let Event::Key(key) = event::read()?
         {
             app.handle_key(key);
+            if app.sequencer.is_running() {
+                app.tick_sequencer();
+                last_sequencer = Instant::now();
+            }
         }
     }
 
@@ -801,5 +991,6 @@ fn main() -> io::Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
+    log::info!(target: "treble_tui", "application shut down");
     Ok(())
 }

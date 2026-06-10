@@ -1,15 +1,23 @@
 [package]
-name = "rustic-tui"
+name = "treble-tui"
 version = "0.1.0"
 edition = "2024"
-description = "A vim-like TUI live-coding environment for Rustic"
+description = "A vim-like TUI live-coding environment for Treble"
 
 [[bin]]
-name = "rustic-tui"
+name = "treble-tui"
 path = "src/main.rs"
 
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
 unicode-width = "0.2"
-rustic-lang = { path = "../rustic-lang" }
+treble-lang = { path = "../treble-lang" }
+treble = { path = "../treble-core" }
+log = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"] }
+tracing-appender = "0.2"
+clap = { version = "4.5", features = ["derive", "env"] }
+directories = "6.0"
+thiserror = "2.0"

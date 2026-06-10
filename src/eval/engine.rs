@@ -1,9 +1,9 @@
 use crate::panels::{EvalEntry, EvalEntryKind};
-use rustic_lang::session::{Delta, Session};
+use treble_lang::session::{Delta, Session};
 
-/// Evaluation engine backed by rustic-lang's Session.
+/// Evaluation engine backed by treble-lang's Session.
 ///
-/// Wraps the rustic-lang [`Session`] and converts its output into
+/// Wraps the treble-lang [`Session`] and converts its output into
 /// display entries for the TUI eval output panel.
 pub struct EvalEngine {
     session: Session,
@@ -104,9 +104,14 @@ impl EvalEngine {
         entries
     }
 
-    /// Get the current session (for context panel).
-    pub fn _session(&self) -> &Session {
+    /// Get the current session (for sequencer and context panel).
+    pub fn session(&self) -> &Session {
         &self.session
+    }
+
+    /// Clear pending deltas after the sequencer applies them at a loop boundary.
+    pub fn apply_pending(&mut self) {
+        self.session.apply_pending();
     }
 }
 

@@ -1,0 +1,12 @@
+-- Rustic Live — edit and save (:w / Ctrl+S) to evaluate
+bpm 128
+sig 4/4
+
+kick  kick   "x ~ x ~"
+snare snare  "~ x ~ x"
+hats  hihat  "x*8"
+
+bass  saw    "c2 _ eb2 _ g1 _ f2 _"
+lead  piano  "c4 eb4 g4 bb4" | slow 2
+
+; pad  pad   "[c3,eb3,g3] ~ [f3,ab3,c4] ~"
