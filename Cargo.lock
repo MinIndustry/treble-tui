@@ -1722,6 +1722,7 @@ dependencies = [
 [[package]]
 name = "treble"
 version = "0.2.0"
+source = "git+https://github.com/MinIndustry/treble-core?tag=0.2.0#b7373bd82a66128010cbb3327930a5c7e5121846"
 dependencies = [
  "atomic_float",
  "chrono",
@@ -1746,8 +1747,8 @@ dependencies = [
 
 [[package]]
 name = "treble-derive"
-version = "0.1.0"
-source = "git+https://github.com/MinIndustry/treble-derive.git#084e307c98ed733452b3c5b3ba9be3e241aeb6ab"
+version = "0.1.1"
+source = "git+https://github.com/MinIndustry/treble-derive.git?tag=0.1.1#9046b2a39f784aa01cd2afdb173a5676b984ff3a"
 dependencies = [
  "convert_case",
  "proc-macro2",
@@ -1759,6 +1760,7 @@ dependencies = [
 [[package]]
 name = "treble-lang"
 version = "0.1.0"
+source = "git+https://github.com/MinIndustry/treble-lang?tag=0.1.0#1f0105323ff6040b3d8c6148ec8da228270bb020"
 dependencies = [
  "nom 8.0.0",
 ]
@@ -1766,7 +1768,7 @@ dependencies = [
 [[package]]
 name = "treble-meta"
 version = "0.1.0"
-source = "git+https://github.com/MinIndustry/treble-meta.git#2fb9a3c842b82ff3fa5b90f5fb87c472df02c8e0"
+source = "git+https://github.com/MinIndustry/treble-meta.git?tag=0.1.0#2fb9a3c842b82ff3fa5b90f5fb87c472df02c8e0"
 dependencies = [
  "proc-macro2",
  "quote",

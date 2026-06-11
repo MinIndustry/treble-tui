@@ -12,8 +12,8 @@ path = "src/main.rs"
 ratatui = "0.29"
 crossterm = "0.28"
 unicode-width = "0.2"
-treble-lang = { path = "../treble-lang" }
-treble = { path = "../treble-core" }
+treble-lang = { git = "https://github.com/MinIndustry/treble-lang", tag = "0.1.0" }
+treble = { git = "https://github.com/MinIndustry/treble-core", tag = "0.2.0" }
 log = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"] }
